@@ -1,3 +1,12 @@
+# 外部JS版（Netlify向け）
+
+以下の2ファイルを同じフォルダに配置してデプロイしてください。
+
+---
+
+## 1) `index.html`
+
+```html
 <!doctype html>
 <html lang="ja">
 <head>
@@ -64,143 +73,159 @@
     </div>
   </div>
 
-  <script>
-    // 便利関数
-    const $ = sel => document.querySelector(sel);
-
-    // 今日の文字列（YYYY-MM-DD）
-    function todayStr(){
-      const d = new Date();
-      const y = d.getFullYear();
-      const m = String(d.getMonth()+1).padStart(2,'0');
-      const dd = String(d.getDate()).padStart(2,'0');
-      return `${y}-${m}-${dd}`;
-    }
-
-    // Web Audio でビープ
-    async function beep(){
-      try{
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = 880;
-        gain.gain.value = 0.08;
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.start(); osc.stop(ctx.currentTime + 0.2);
-        setTimeout(()=>ctx.close(), 500);
-      }catch(e){ console.warn('beep error:', e); }
-    }
-
-    // 通知権限
-    async function ensurePermission(){
-      if(!('Notification' in window)) return false;
-      if(Notification.permission === 'granted') return true;
-      if(Notification.permission !== 'denied'){
-        const r = await Notification.requestPermission();
-        return r === 'granted';
-      }
-      return false;
-    }
-
-    function notify(title, body){
-      try{
-        if('Notification' in window && Notification.permission === 'granted'){
-          new Notification(title, { body });
-        }
-      }catch(e){ console.warn('notify error:', e); }
-    }
-
-    // 状態表示（Origin/SecureContext/Notification）
-    function refreshEnv(){
-      const host = location.host || '(file)';
-      const secure = window.isSecureContext;
-      const perm = ('Notification' in window) ? Notification.permission : 'unsupported';
-      const envEl = $('#env');
-      envEl.textContent = `Origin: ${host} / SecureContext: ${secure} / Notification: ${perm}`;
-      if(!secure && host === ''){
-        const tip = document.createElement('div');
-        tip.className = 'muted';
-        tip.style.marginTop = '6px';
-        tip.innerHTML = '⚠️ file:// 実行では通知が不安定です。<b>localhost</b> で開いてください（例：<code>python -m http.server 8000</code> → <code>http://localhost:8000/</code>）。';
-        envEl.appendChild(tip);
-      }
-    }
-
-    // イベント配列（保存機能なし＝リロードで消える）
-    const events = [];
-
-    function render(){
-      const wrap = $('#events');
-      wrap.innerHTML = '';
-      events.sort((a,b)=>a.time - b.time);
-      for(const e of events){
-        const div = document.createElement('div');
-        div.className = 'event';
-        const t = new Date(e.time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-        div.textContent = `${t} ${e.title}`;
-        wrap.appendChild(div);
-      }
-    }
-
-    function scheduleChecks(){
-      setInterval(()=>{
-        const now = Date.now();
-        for(const e of events){
-          // 1分前（1回）
-          if(!e.firedPre && now >= e.time - 60_000 && now < e.time - 59_000){
-            notify('会議1分前', e.title);
-            beep();
-            e.firedPre = true;
-          }
-          // 開始時（1回）
-          if(!e.fired && now >= e.time && now < e.time + 10_000){
-            notify('会議開始', e.title);
-            beep();
-            e.fired = true;
-          }
-        }
-      }, 5000);
-    }
-
-    // 初期化
-    window.addEventListener('load', ()=>{
-      // 日付デフォルト＝今日
-      $('#date').value = todayStr();
-      refreshEnv();
-
-      // 追加
-      $('#add').addEventListener('click', ()=>{
-        const d = $('#date').value;
-        const t = $('#time').value;
-        const title = ($('#title').value || '会議').trim();
-        if(!d || !t){ alert('日付と時間を入力してください'); return; }
-        const dt = new Date(`${d}T${t}`);
-        events.push({ time: dt.getTime(), title, firedPre:false, fired:false });
-        render();
-      });
-
-      // 通知許可
-      $('#perm').addEventListener('click', async ()=>{
-        const ok = await ensurePermission();
-        alert(ok ? '通知許可OK' : '通知許可が得られませんでした');
-        refreshEnv();
-      });
-
-      // テスト
-      $('#test').addEventListener('click', async ()=>{
-        if(await ensurePermission()){
-          notify('テスト通知', 'これはテストです');
-          beep();
-          refreshEnv();
-        }else{
-          alert('通知許可が必要です');
-        }
-      });
-
-      // 監視開始
-      scheduleChecks();
-    });
-  </script>
+  <!-- 外部スクリプト（インライン禁止のCSPに対応） -->
+  <script src="./app.js" defer></script>
 </body>
 </html>
+```
+
+---
+
+## 2) `app.js`
+
+```js
+// ユーティリティ
+const $ = sel => document.querySelector(sel);
+
+function todayStr(){
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const dd = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${dd}`;
+}
+
+async function beep(){
+  try{
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = 880;
+    gain.gain.value = 0.08;
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(); osc.stop(ctx.currentTime + 0.2);
+    setTimeout(()=>ctx.close(), 500);
+  }catch(e){ console.warn('beep error:', e); }
+}
+
+async function ensurePermission(){
+  if(!('Notification' in window)) return false;
+  if(Notification.permission === 'granted') return true;
+  if(Notification.permission !== 'denied'){
+    const r = await Notification.requestPermission();
+    return r === 'granted';
+  }
+  return false;
+}
+
+function notify(title, body){
+  try{
+    if('Notification' in window && Notification.permission === 'granted'){
+      new Notification(title, { body });
+    }
+  }catch(e){ console.warn('notify error:', e); }
+}
+
+function refreshEnv(){
+  const host = location.host || '(file)';
+  const secure = window.isSecureContext;
+  const perm = ('Notification' in window) ? Notification.permission : 'unsupported';
+  const envEl = $('#env');
+  if(envEl){
+    envEl.textContent = `Origin: ${host} / SecureContext: ${secure} / Notification: ${perm}`;
+    if(!secure && host === ''){
+      const tip = document.createElement('div');
+      tip.className = 'muted';
+      tip.style.marginTop = '6px';
+      tip.innerHTML = '⚠️ file:// 実行では通知が不安定です。<b>localhost</b> で開いてください（例：<code>python -m http.server 8000</code> → <code>http://localhost:8000/</code>）。';
+      envEl.appendChild(tip);
+    }
+  }
+}
+
+// 保存機能なし＝リロードで消える
+const events = [];
+
+function render(){
+  const wrap = $('#events');
+  if(!wrap) return;
+  wrap.innerHTML = '';
+  events.sort((a,b)=>a.time - b.time);
+  for(const e of events){
+    const div = document.createElement('div');
+    div.className = 'event';
+    const t = new Date(e.time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    div.textContent = `${t} ${e.title}`;
+    wrap.appendChild(div);
+  }
+}
+
+function scheduleChecks(){
+  setInterval(()=>{
+    const now = Date.now();
+    for(const e of events){
+      if(!e.firedPre && now >= e.time - 60_000 && now < e.time - 59_000){
+        notify('会議1分前', e.title);
+        beep();
+        e.firedPre = true;
+      }
+      if(!e.fired && now >= e.time && now < e.time + 10_000){
+        notify('会議開始', e.title);
+        beep();
+        e.fired = true;
+      }
+    }
+  }, 5000);
+}
+
+window.addEventListener('load', ()=>{
+  // デフォルト日付
+  const dateEl = $('#date');
+  if(dateEl) dateEl.value = todayStr();
+  refreshEnv();
+
+  // 追加
+  $('#add')?.addEventListener('click', ()=>{
+    const d = $('#date')?.value;
+    const t = $('#time')?.value;
+    const title = ($('#title')?.value || '会議').trim();
+    if(!d || !t){ alert('日付と時間を入力してください'); return; }
+    const dt = new Date(`${d}T${t}`);
+    events.push({ time: dt.getTime(), title, firedPre:false, fired:false });
+    render();
+  });
+
+  // 通知許可
+  $('#perm')?.addEventListener('click', async ()=>{
+    const ok = await ensurePermission();
+    alert(ok ? '通知許可OK' : '通知許可が得られませんでした');
+    refreshEnv();
+  });
+
+  // テスト
+  $('#test')?.addEventListener('click', async ()=>{
+    if(await ensurePermission()){
+      notify('テスト通知', 'これはテストです');
+      beep();
+      refreshEnv();
+    }else{
+      alert('通知許可が必要です');
+    }
+  });
+
+  // 監視開始
+  scheduleChecks();
+});
+```
+
+---
+
+## デプロイ手順（Netlify）
+
+1. 上記2ファイル（`index.html` と `app.js`）をリポジトリまたはフォルダに配置。
+2. Netlifyにデプロイ（ドラッグ＆ドロップでもOK）。
+3. ページを開いて、上部の「Origin / SecureContext / Notification」を確認。
+4. アドレスバーの🔒から**通知を許可**→「テスト」で通知＋ビープ確認。
+
+> もし独自でCSPを設定している場合は、`script-src 'self'` が必要です（本構成はインラインJS未使用）。
